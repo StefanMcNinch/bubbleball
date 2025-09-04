@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bubbleball</title>
+    <title>Deathball P2P - Wizard Soccer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.0/peerjs.min.js"></script>
     <style>
         /* (CSS unchanged) */
@@ -51,14 +51,6 @@
                 bubbles: [],
                 onGround: false
             },
-            ball: {
-                x: 750,
-                y: 450,
-                vx: 0,
-                vy: 0,
-                radius: 15,
-                color: '#ffffff'
-            },
             goal1: { x: 300, y: 300, radius: 50, color: '#4444ff' },
             goal2: { x: 1200, y: 300, radius: 50, color: '#ff4444' },
             walls: [
@@ -76,3 +68,318 @@
             ],
             keys: {},
             gameRunning: true,
+            gravity: 0.375,
+            ballGravity: 0.147,
+            friction: 0.8,
+            jumpPower: -9,
+            moveSpeed: 4.5,
+            slowZoneActive: false
+        };
+
+        function updatePlayers() {
+            [gameState.player1, gameState.player2].forEach(player => {
+                const keys = gameState.keys[player === gameState.player1 ? 1 : 2] || {};
+
+                // Apply gravity
+                player.vy += gameState.gravity;
+
+                // Horizontal movement
+                if (keys['ArrowLeft'] || keys['KeyA']) {
+                    player.vx = -gameState.moveSpeed;
+                } else if (keys['ArrowRight'] || keys['KeyD']) {
+                    player.vx = gameState.moveSpeed;
+                } else {
+                    player.vx = 0;
+                }
+
+                // Jump
+                if (player.onGround && (keys['ArrowUp'] || keys['KeyW'])) {
+                    jump(player);
+                }
+
+                // Update position
+                player.x += player.vx;
+                player.y += player.vy;
+
+                // Keep player within bounds
+                if (player.x - player.radius < 25) {
+                    player.x = 25 + player.radius;
+                } else if (player.x + player.radius > canvas.width - 25) {
+                    player.x = canvas.width - 25 - player.radius;
+                }
+
+                // Prevent player from falling through the floor
+                const floorY = canvas.height - 25 - player.radius;
+                if (player.y > floorY) {
+                    player.y = floorY;
+                    player.vy = 0;
+                    player.onGround = true;
+                } else {
+                    player.onGround = false;
+                }
+            });
+        }
+        
+        function updateBubbles(player) {
+            const now = Date.now();
+            player.bubbles = player.bubbles.filter(bubble => bubble.static || now < bubble.expirationTime);
+
+            player.bubbles.forEach(bubble => {
+                if (!bubble.static) {
+                    const timeElapsed = now - (bubble.expirationTime - 500);
+                    bubble.alpha = 0.8 * (1 - timeElapsed / 500);
+                }
+            });
+        }
+
+        function jump(player) {
+            player.bubbles.forEach(bubble => {
+                if (bubble.static) {
+                    bubble.static = false;
+                    bubble.expirationTime = Date.now() + 500;
+                }
+            });
+            const newBubble = {
+                x: player.x,
+                y: player.y,
+                radius: 55, // 10% bigger
+                alpha: 0.8,
+                static: true
+            };
+            player.bubbles.push(newBubble);
+            
+            let jumpX = 0, jumpY = gameState.jumpPower;
+
+            const keys = gameState.keys[myPlayerNumber] || {};
+            if (keys['ArrowLeft']) jumpX = -gameState.moveSpeed;
+            if (keys['ArrowRight']) jumpX = gameState.moveSpeed;
+
+            if ((keys['ArrowLeft'] || keys['ArrowRight']) && !keys['ArrowUp']) {
+                jumpY = gameState.jumpPower * 0.25;
+            }
+
+            const thrustMultiplier = 1.3;
+            player.vx = jumpX * thrustMultiplier;
+            player.vy = jumpY * thrustMultiplier;
+            player.onGround = false;
+        }
+
+        function updateBall() {
+            if (isMultiplayer && !isHost) return;
+
+            const ball = gameState.ball;
+            ball.vy += gameState.ballGravity;
+            ball.vx *= 0.999;
+            ball.vy *= 0.999;
+
+            const speedMultiplier = gameState.slowZoneActive ? 0.5 : 1.0;
+            ball.x += ball.vx * speedMultiplier;
+            ball.y += ball.vy * speedMultiplier;
+
+            for (let wall of gameState.walls) {
+                if (ball.x + ball.radius > wall.x && 
+                    ball.x - ball.radius < wall.x + wall.width &&
+                    ball.y + ball.radius > wall.y &&
+                    ball.y - ball.radius < wall.y + wall.height) {
+
+                    if (ball.vy > 0 && ball.y < wall.y) {
+                        ball.y = wall.y - ball.radius;
+                        ball.vy = -Math.abs(ball.vy) * 0.85;
+                    }
+                    else if (ball.vy < 0 && ball.y > wall.y + wall.height) {
+                        ball.y = wall.y + wall.height + ball.radius;
+                        ball.vy = Math.abs(ball.vy) * 0.85;
+                    }
+                    else if (ball.vx > 0 && ball.x < wall.x) {
+                        ball.x = wall.x - ball.radius;
+                        ball.vx = -Math.abs(ball.vx) * 0.85;
+                    }
+                    else if (ball.vx < 0 && ball.x > wall.x + wall.width) {
+                        ball.x = wall.x + wall.width + ball.radius;
+                        ball.vx = Math.abs(ball.vx) * 0.85;
+                    }
+                }
+            }
+
+            [gameState.player1, gameState.player2].forEach(player => {
+                player.bubbles.forEach(bubble => {
+                    const dist = Math.sqrt((ball.x - bubble.x) ** 2 + (ball.y - bubble.y) ** 2);
+                    if (dist < ball.radius + bubble.radius) {
+                        const angle = Math.atan2(ball.y - bubble.y, ball.x - bubble.x);
+                        const force = 10;
+                        ball.vx = Math.cos(angle) * force;
+                        ball.vy = Math.sin(angle) * force;
+                        ball.x = bubble.x + Math.cos(angle) * (ball.radius + bubble.radius);
+                        ball.y = bubble.y + Math.sin(angle) * (ball.radius + bubble.radius);
+                    }
+                });
+            });
+
+            [gameState.player1, gameState.player2].forEach(player => {
+                const dist = Math.sqrt((ball.x - player.x) ** 2 + (ball.y - player.y) ** 2);
+                if (dist < ball.radius + player.radius) {
+                    const angle = Math.atan2(ball.y - player.y, ball.x - player.x);
+                    const force = 6;
+                    ball.vx = Math.cos(angle) * force;
+                    ball.vy = Math.sin(angle) * force;
+                    ball.x = player.x + Math.cos(angle) * (ball.radius + player.radius);
+                    ball.y = player.y + Math.sin(angle) * (ball.radius + player.radius);
+                }
+            });
+
+            if (ball.y - ball.radius < 25) {
+                ball.y = 25 + ball.radius;
+                ball.vy = Math.abs(ball.vy) * 0.85;
+            } else if (ball.y + ball.radius > canvas.height - 25) {
+                ball.y = canvas.height - 25 - ball.radius;
+                ball.vy = -Math.abs(ball.vy) * 0.85;
+            }
+
+            if (ball.x - ball.radius < 25) {
+                ball.x = 25 + ball.radius;
+                ball.vx = Math.abs(ball.vx) * 0.85;
+            } else if (ball.x + ball.radius > canvas.width - 25) {
+                ball.x = canvas.width - 25 - ball.radius;
+                ball.vx = -Math.abs(ball.vx) * 0.85;
+            }
+
+            if (gameState.corners) {
+                gameState.corners.forEach(corner => {
+                    const dx = ball.x - (corner.x + (corner.type.includes('r') ? 0 : corner.radius));
+                    const dy = ball.y - (corner.y + (corner.type.includes('b') ? 0 : corner.radius));
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < corner.radius + ball.radius) {
+                        const angle = Math.atan2(dy, dx);
+                        const targetX = (corner.x + (corner.type.includes('r') ? 0 : corner.radius)) + Math.cos(angle) * (corner.radius + ball.radius);
+                        const targetY = (corner.y + (corner.type.includes('b') ? 0 : corner.radius)) + Math.sin(angle) * (corner.radius + ball.radius);
+                        ball.x = targetX;
+                        ball.y = targetY;
+
+                        const normalX = Math.cos(angle);
+                        const normalY = Math.sin(angle);
+                        const dotProduct = ball.vx * normalX + ball.vy * normalY;
+                        ball.vx = ball.vx - 2 * dotProduct * normalX;
+                        ball.vy = ball.vy - 2 * dotProduct * normalY;
+                        ball.vx *= 0.8;
+                        ball.vy *= 0.8;
+                    }
+                });
+            }
+
+            checkGoals();
+        }
+
+        // Placeholder for the missing function
+        function checkGoals() {
+            // Add goal-scoring logic here
+        }
+
+        function resetGameState() {
+            gameState.ball.x = 750;
+            gameState.ball.y = 450;
+            gameState.ball.vx = (Math.random() - 0.5) * 3;
+            gameState.ball.vy = (Math.random() - 0.5) * 3;
+
+            gameState.player1.x = 150;
+            gameState.player1.y = 450;
+            gameState.player1.vx = 0;
+            gameState.player1.vy = 0;
+            gameState.player1.bubbles = [];
+            gameState.player1.onGround = false;
+
+            gameState.player2.x = 1350;
+            gameState.player2.y = 450;
+            gameState.player2.vx = 0;
+            gameState.player2.vy = 0;
+            gameState.player2.bubbles = [];
+            gameState.player2.onGround = false;
+        }
+
+        function draw() {
+            ctx.fillStyle = '#001122';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#333333';
+            gameState.walls.forEach(wall => {
+                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+            });
+
+            ctx.fillStyle = '#333333';
+            if (gameState.corners) {
+                gameState.corners.forEach(corner => {
+                    ctx.beginPath();
+                    ctx.arc(
+                        corner.x + (corner.type.includes('r') ? 0 : corner.radius),
+                        corner.y + (corner.type.includes('b') ? 0 : corner.radius),
+                        corner.radius, 0, Math.PI * 2
+                    );
+                    ctx.fill();
+                });
+            }
+
+            ctx.fillStyle = gameState.goal1.color;
+            ctx.beginPath();
+            ctx.arc(gameState.goal1.x, gameState.goal1.y, gameState.goal1.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = gameState.goal2.color;
+            ctx.beginPath();
+            ctx.arc(gameState.goal2.x, gameState.goal2.y, gameState.goal2.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            [gameState.player1, gameState.player2].forEach(player => {
+                player.bubbles.forEach(bubble => {
+                    ctx.globalAlpha = bubble.alpha;
+                    ctx.strokeStyle = player.color;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                });
+            });
+
+            [gameState.player1, gameState.player2].forEach(player => {
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = player.color;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            ctx.fillStyle = gameState.ball.color;
+            ctx.beginPath();
+            ctx.arc(gameState.ball.x, gameState.ball.y, gameState.ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = gameState.ball.color;
+            ctx.beginPath();
+            ctx.arc(gameState.ball.x, gameState.ball.y, gameState.ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        
+        // The main game loop
+        function gameLoop() {
+            if (gameState.gameRunning) {
+                updatePlayers();
+                updateBall();
+                updateBubbles(gameState.player1);
+                updateBubbles(gameState.player2);
+                draw();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
