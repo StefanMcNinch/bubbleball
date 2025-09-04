@@ -28,53 +28,62 @@
         const SYNC_INTERVAL = 16; // ~60fps sync
 
         // Game state
-        let gameState = {
-            player1: {
-                x: 150,
-                y: 450,
-                vx: 0,
-                vy: 0,
-                radius: 15,
-                color: '#ff4444',
-                score: 0,
-                bubbles: [],
-                onGround: false
-            },
-            player2: {
-                x: 1350,
-                y: 450,
-                vx: 0,
-                vy: 0,
-                radius: 15,
-                color: '#4444ff',
-                score: 0,
-                bubbles: [],
-                onGround: false
-            },
-            goal1: { x: 300, y: 300, radius: 50, color: '#4444ff' },
-            goal2: { x: 1200, y: 300, radius: 50, color: '#ff4444' },
-            walls: [
-                { x: 0, y: 25, width: 25, height: 850 },
-                { x: 1475, y: 25, width: 25, height: 850 },
-                { x: 25, y: 0, width: 1450, height: 25 },
-                { x: 25, y: 875, width: 1450, height: 25 }
-            ],
-            corners: [
-                { x: 0, y: 0, radius: 25, type: 'tl' },
-                { x: 1475, y: 0, radius: 25, type: 'tr' },
-                { x: 0, y: 875, radius: 25, type: 'bl' },
-                { x: 1475, y: 875, radius: 25, type: 'br' },
-                { x: 750, y: 875, radius: 60, type: 'bump' }
-            ],
-            keys: {},
-            gameRunning: true,
-            gravity: 0.375,
-            ballGravity: 0.147,
-            friction: 0.8,
-            jumpPower: -9,
-            moveSpeed: 4.5,
-            slowZoneActive: false
-        };
+let gameState = {
+    player1: {
+        x: 150,
+        y: 450,
+        vx: 0,
+        vy: 0,
+        radius: 15,
+        color: '#ff4444',
+        score: 0,
+        bubbles: [],
+        onGround: false
+    },
+    player2: {
+        x: 1350,
+        y: 450,
+        vx: 0,
+        vy: 0,
+        radius: 15,
+        color: '#4444ff',
+        score: 0,
+        bubbles: [],
+        onGround: false
+    },
+    // The missing ball object has been added here
+    ball: {
+        x: 750,
+        y: 450,
+        vx: 0,
+        vy: 0,
+        radius: 15,
+        color: '#ffffff'
+    },
+    goal1: { x: 300, y: 300, radius: 50, color: '#4444ff' },
+    goal2: { x: 1200, y: 300, radius: 50, color: '#ff4444' },
+    walls: [
+        { x: 0, y: 25, width: 25, height: 850 },
+        { x: 1475, y: 25, width: 25, height: 850 },
+        { x: 25, y: 0, width: 1450, height: 25 },
+        { x: 25, y: 875, width: 1450, height: 25 }
+    ],
+    corners: [
+        { x: 0, y: 0, radius: 25, type: 'tl' },
+        { x: 1475, y: 0, radius: 25, type: 'tr' },
+        { x: 0, y: 875, radius: 25, type: 'bl' },
+        { x: 1475, y: 875, radius: 25, type: 'br' },
+        { x: 750, y: 875, radius: 60, type: 'bump' }
+    ],
+    keys: {},
+    gameRunning: true,
+    gravity: 0.375,
+    ballGravity: 0.147,
+    friction: 0.8,
+    jumpPower: -9,
+    moveSpeed: 4.5,
+    slowZoneActive: false
+};
 
         function updatePlayers() {
             [gameState.player1, gameState.player2].forEach(player => {
