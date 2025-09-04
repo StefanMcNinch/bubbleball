@@ -13,7 +13,14 @@
     <div id="gameContainer">
         <canvas id="gameCanvas" width="1500" height="900"></canvas>
     </div>
-
+    
+<div id="connectionControls" style="position: absolute; top: 10px; right: 10px; background: #222; padding: 10px; border-radius: 5px; color: white;">
+        <input type="text" id="peerIdInput" placeholder="Enter Peer ID" style="width: 150px;">
+        <button onclick="connectToPeer()">Connect</button>
+        <button onclick="createPeer()">Host</button>
+        <div id="myPeerId"></div>
+    </div>
+    
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -84,6 +91,57 @@ let gameState = {
     moveSpeed: 4.5,
     slowZoneActive: false
 };
+        function createPeer() {
+            peer = new Peer();
+            peer.on('open', (id) => {
+                document.getElementById('myPeerId').textContent = 'Your ID: ' + id;
+                isHost = true;
+                myPlayerNumber = 1;
+                isMultiplayer = true;
+                peer.on('connection', (conn) => {
+                    connection = conn;
+                    setupConnection(conn);
+                });
+            });
+        }
+
+        function connectToPeer() {
+            const peerId = document.getElementById('peerIdInput').value;
+            if (peerId) {
+                peer = new Peer();
+                peer.on('open', () => {
+                    connection = peer.connect(peerId);
+                    setupConnection(connection);
+                    isMultiplayer = true;
+                    isHost = false;
+                    myPlayerNumber = 2;
+                });
+            }
+        }
+        
+        function setupConnection(conn) {
+            conn.on('open', () => {
+                console.log('Connection established.');
+                document.getElementById('connectionControls').style.display = 'none';
+            });
+            conn.on('data', (data) => {
+                if (isHost) {
+                    gameState.player2.x = data.x;
+                    gameState.player2.y = data.y;
+                    gameState.player2.vy = data.vy;
+                    gameState.player2.bubbles = data.bubbles;
+                    gameState.keys[2] = data.keys;
+                } else {
+                    gameState.player1.x = data.x;
+                    gameState.player1.y = data.y;
+                    gameState.player1.vy = data.vy;
+                    gameState.player1.bubbles = data.bubbles;
+                    gameState.keys[1] = data.keys;
+                    // Host sends full state, so update everything
+                    Object.assign(gameState, data);
+                }
+            });
+        }
 
         function updatePlayers() {
             [gameState.player1, gameState.player2].forEach(player => {
@@ -387,7 +445,18 @@ let gameState = {
             }
             requestAnimationFrame(gameLoop);
         }
+// Handle keyboard input
+        document.addEventListener('keydown', (event) => {
+            const keys = gameState.keys[myPlayerNumber] || {};
+            keys[event.code] = true;
+            gameState.keys[myPlayerNumber] = keys;
+        });
 
+        document.addEventListener('keyup', (event) => {
+            const keys = gameState.keys[myPlayerNumber] || {};
+            keys[event.code] = false;
+            gameState.keys[myPlayerNumber] = keys;
+        });
         requestAnimationFrame(gameLoop);
     </script>
 </body>
