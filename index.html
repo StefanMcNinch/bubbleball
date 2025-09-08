@@ -294,8 +294,8 @@
                 radius: 15,
                 color: '#ffffff'
             },
-            goal1: { x: 300, y: 300, radius: 50, color: '#ff4444' },
-            goal2: { x: 1200, y: 300, radius: 50, color: '#4444ff' },
+            goal1: { x: 300, y: 300, radius: 50, color: '#4444ff' },
+            goal2: { x: 1200, y: 300, radius: 50, color: '#ff4444' },
             walls: [
                 { x: 0, y: 25, width: 25, height: 850 },
                 { x: 1475, y: 25, width: 25, height: 850 },
@@ -512,8 +512,6 @@
                     action: 'manualReset'
                 });
             }
-            
-            console.log('Game manually reset with ESC key');
         }
         
         function startMultiplayerGame() {
@@ -567,6 +565,7 @@
         
         // Input handling
         document.addEventListener('keydown', (e) => {
+            console.log('Key pressed:', e.code, 'isMultiplayer:', isMultiplayer);
             gameState.keys[e.code] = true;
             
             if (isMultiplayer) {
@@ -611,6 +610,7 @@
         
         // Game functions
         function jumpPlayer(player, playerNum) {
+            console.log('jumpPlayer called for player', playerNum);
             if (player.bubble) {
                 player.bubble = null;
             }
@@ -624,20 +624,32 @@
             
             let jumpX = 0, jumpY = gameState.jumpPower;
             
-            // In local play, determine jump direction based on player position relative to center
+            // In local play, use different controls for each player
             if (!isMultiplayer) {
-                const centerX = canvas.width / 2;
-                const isLeftSide = player.x < centerX;
-                
-                if (gameState.keys['ArrowUp']) jumpY = gameState.jumpPower;
-                if (gameState.keys['ArrowDown']) jumpY = -gameState.jumpPower * 0.5;
-                if (gameState.keys['ArrowLeft']) {
-                    jumpX = isLeftSide ? -gameState.jumpPower * 0.94 : gameState.jumpPower * 0.94;
-                    jumpY = gameState.jumpPower * 0.34;
-                }
-                if (gameState.keys['ArrowRight']) {
-                    jumpX = isLeftSide ? gameState.jumpPower * 0.94 : -gameState.jumpPower * 0.94;
-                    jumpY = gameState.jumpPower * 0.34;
+                if (playerNum === 1) {
+                    // Player 1 uses WASD
+                    if (gameState.keys['KeyW']) jumpY = gameState.jumpPower;
+                    if (gameState.keys['KeyS']) jumpY = -gameState.jumpPower * 0.5;
+                    if (gameState.keys['KeyA']) {
+                        jumpX = -gameState.jumpPower * 0.94;
+                        jumpY = gameState.jumpPower * 0.34;
+                    }
+                    if (gameState.keys['KeyD']) {
+                        jumpX = gameState.jumpPower * 0.94;
+                        jumpY = gameState.jumpPower * 0.34;
+                    }
+                } else {
+                    // Player 2 uses Arrow keys
+                    if (gameState.keys['ArrowUp']) jumpY = gameState.jumpPower;
+                    if (gameState.keys['ArrowDown']) jumpY = -gameState.jumpPower * 0.5;
+                    if (gameState.keys['ArrowLeft']) {
+                        jumpX = -gameState.jumpPower * 0.94;
+                        jumpY = gameState.jumpPower * 0.34;
+                    }
+                    if (gameState.keys['ArrowRight']) {
+                        jumpX = gameState.jumpPower * 0.94;
+                        jumpY = gameState.jumpPower * 0.34;
+                    }
                 }
             }
             
@@ -679,6 +691,7 @@
         }
         
         function updatePlayer(player) {
+            console.log('updatePlayer called for:', player === gameState.player1 ? 'Player 1' : 'Player 2');
             // Only update the player we control in multiplayer
             if (isMultiplayer && !isHost) {
                 return; // Non-host players receive updates from host
