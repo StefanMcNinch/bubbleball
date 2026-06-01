@@ -366,7 +366,7 @@
     // ─── Game Logic ───────────────────────────────────────────────
     function jump(player) {
         if (player.bubbles.length >= 3) player.bubbles.shift();
-        player.bubbles.push({ x: player.x, y: player.y, radius: 50, alpha: 0.8, createdAt: Date.now() });
+        player.bubbles.push({ x: player.x, y: player.y, radius: 55, alpha: 0.8, createdAt: Date.now() });
 
         let jumpX = 0, jumpY = gameState.jumpPower;
         if (!isMultiplayer) {
@@ -384,7 +384,7 @@
             if (gameState.keys['ArrowLeft'])  { jumpX = -5; jumpY = -4.3; }
             if (gameState.keys['ArrowRight']) { jumpX =  5; jumpY = -4.3; }
         }
-        player.vx = jumpX * 1.3; player.vy = jumpY * 1.3; player.onGround = false;
+        player.vx = jumpX * 1.56; player.vy = jumpY * 1.56; player.onGround = false;
     }
 
     function updatePlayer(player) {
@@ -393,7 +393,7 @@
         if (player.bubbles.length > 1) {
             const now = Date.now();
             const newest = player.bubbles[player.bubbles.length - 1];
-            player.bubbles = player.bubbles.filter(b => b === newest || (now - b.createdAt) < 500);
+            player.bubbles = player.bubbles.filter(b => b === newest || (now - b.createdAt) < 1000);
         }
 
         const b1 = Math.sqrt((gameState.ball.x - gameState.goal1.x)**2 + (gameState.ball.y - gameState.goal1.y)**2);
@@ -480,7 +480,7 @@
                 const dist = Math.sqrt((ball.x - bubble.x)**2 + (ball.y - bubble.y)**2);
                 if (dist < ball.radius + bubble.radius) {
                     const a = Math.atan2(ball.y - bubble.y, ball.x - bubble.x);
-                    ball.vx = Math.cos(a) * 10; ball.vy = Math.sin(a) * 10;
+                    ball.vx = Math.cos(a) * 12; ball.vy = Math.sin(a) * 12;
                     ball.x = bubble.x + Math.cos(a) * (ball.radius + bubble.radius);
                     ball.y = bubble.y + Math.sin(a) * (ball.radius + bubble.radius);
                 }
