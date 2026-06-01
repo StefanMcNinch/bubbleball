@@ -647,46 +647,164 @@
     }
 
     // ─── AI ───────────────────────────────────────────────────────
+
+    // Predict where ball will be after N frames, bouncing off walls
+    function predictBallPosition(frames) {
+        let { x, y, vx, vy } = gameState.ball;
+        for (let i = 0; i < frames; i++) {
+            vy += gameState.ballGravity;
+            vx *= 0.999; vy *= 0.999;
+            x += vx; y += vy;
+            if (x - 15 < 25)            { x = 25 + 15;                vx =  Math.abs(vx); }
+            if (x + 15 > canvas.width  - 25) { x = canvas.width  - 25 - 15; vx = -Math.abs(vx); }
+            if (y - 15 < 25)            { y = 25 + 15;                vy =  Math.abs(vy); }
+            if (y + 15 > canvas.height - 25) { y = canvas.height - 25 - 15; vy = -Math.abs(vy); }
+        }
+        return { x, y, vx, vy };
+    }
+
+    // Is the ball heading toward the AI goal?
+    function ballThreateningAIGoal() {
+        const ball = gameState.ball;
+        const goal = gameState.goal2;
+        // Ball moving right AND aimed roughly at goal height
+        if (ball.vx > 1) {
+            const framestoGoalX = (goal.x - ball.x) / ball.vx;
+            if (framestoGoalX > 0 && framestoGoalX < 120) {
+                const arrivalY = ball.y + ball.vy * framestoGoalX;
+                if (Math.abs(arrivalY - goal.y) < goal.radius * 2.5) return true;
+            }
+        }
+        return false;
+    }
+
+    // Find the ideal position to hit the ball toward the opponent's goal
+    function calcShotPosition(ai, ball) {
+        const targetGoal = gameState.goal1;
+        // Angle from ball to target goal
+        const angleToGoal = Math.atan2(targetGoal.y - ball.y, targetGoal.x - ball.x);
+        // Stand behind the ball relative to target goal
+        const standDist = ai.radius + ball.radius + 8;
+        return {
+            x: ball.x - Math.cos(angleToGoal) * standDist * 2.5,
+            y: ball.y - Math.sin(angleToGoal) * standDist * 2.5
+        };
+    }
+
     function updateAI() {
         if (!aiState.enabled || !gameState.gameRunning) return;
         const now = Date.now();
         const cfg = AI_CONFIGS[aiState.difficulty];
         if (now - aiState.lastActionTime < cfg.reactionTime) return;
 
-        const ai = gameState.player2, ball = gameState.ball;
-        const px = Math.max(25, Math.min(canvas.width  - 25, ball.x + ball.vx * cfg.predictFrames));
+        const ai   = gameState.player2;
+        const ball = gameState.ball;
+        const aiGoal = gameState.goal2;
+        const p1Goal = gameState.goal1;
 
-        const distToBall   = Math.sqrt((ai.x - ball.x)**2 + (ai.y - ball.y)**2);
-        const ballToAIGoal = Math.sqrt((ball.x - gameState.goal2.x)**2 + (ball.y - gameState.goal2.y)**2);
-        const ballToP1Goal = Math.sqrt((ball.x - gameState.goal1.x)**2 + (ball.y - gameState.goal1.y)**2);
+        // Add positional error for easier difficulties
+        const errorAmount = aiState.difficulty === 'easy' ? 80 : aiState.difficulty === 'medium' ? 30 : 0;
+        const error = (Math.random() - 0.5) * errorAmount * 2;
 
-        let targetX;
-        if (ball.x > 900 || ballToAIGoal < 200)
-            targetX = ballToAIGoal < 150 ? ball.x : gameState.goal2.x - 100;
-        else if (ball.x < 600 && ballToP1Goal < 300)
-            targetX = ball.x;
-        else
-            targetX = distToBall > 400 ? (ball.x + 1200) / 2 : px;
+        const ballToAIGoal = Math.sqrt((ball.x - aiGoal.x)**2 + (ball.y - aiGoal.y)**2);
+        const distToBall   = Math.sqrt((ai.x - ball.x)**2   + (ai.y - ball.y)**2);
+        const threatened   = ballThreateningAIGoal();
 
-        const dz = aiState.difficulty === 'easy' ? 40 : 20;
+        // Intercept point - where will ball be when AI can reach it?
+        const travelFrames = Math.max(10, Math.min(cfg.predictFrames, distToBall / 6));
+        const intercept    = predictBallPosition(travelFrames);
+
+        // ── Determine mode ──────────────────────────────────────
+        let targetX, targetY, mode;
+
+        if (threatened || ballToAIGoal < 180) {
+            // DEFEND: get between ball and goal
+            mode = 'defend';
+            if (ballToAIGoal < 120) {
+                // Ball is very close - go directly to it
+                targetX = ball.x + error;
+                targetY = ball.y;
+            } else {
+                // Block the angle - position between ball and goal
+                const angleToGoal = Math.atan2(aiGoal.y - ball.y, aiGoal.x - ball.x);
+                targetX = ball.x + Math.cos(angleToGoal) * 80 + error;
+                targetY = ball.y + Math.sin(angleToGoal) * 80;
+            }
+        } else if (ball.x < p1Goal.x + 200 && Math.abs(ball.y - p1Goal.y) < 150) {
+            // ATTACK: ball is near opponent goal, go for the shot
+            mode = 'attack';
+            const shot = calcShotPosition(ai, ball);
+            targetX = shot.x + error;
+            targetY = shot.y;
+        } else {
+            // CHASE: intercept the ball
+            mode = 'chase';
+            targetX = intercept.x + error;
+            targetY = intercept.y;
+        }
+
+        // ── Movement ────────────────────────────────────────────
+        const dz = aiState.difficulty === 'easy' ? 45 : 18;
         gameState.keys['ArrowLeft']  = ai.x > targetX + dz;
         gameState.keys['ArrowRight'] = ai.x < targetX - dz;
 
-        if (now - aiState.lastJumpTime > cfg.jumpCooldown) {
-            const should =
-                (distToBall < 150 && ball.y < ai.y - 30) ||
-                (Math.abs(ai.x - ball.x) < 100 && ball.y < 400 && ball.vy > -2) ||
-                (ballToAIGoal < 150 && ball.y < ai.y) ||
-                (cfg.randomJump > 0 && Math.random() < cfg.randomJump);
-            if (should) {
-                gameState.keys['ArrowLeft']  = ball.x < ai.x - 50;
-                gameState.keys['ArrowRight'] = ball.x > ai.x + 50;
-                gameState.keys['ArrowUp']    = Math.abs(ball.x - ai.x) <= 50;
+        // ── Jump logic ──────────────────────────────────────────
+        const canJump = now - aiState.lastJumpTime > cfg.jumpCooldown;
+        if (canJump) {
+            let shouldJump = false;
+            let jumpLeft = false, jumpRight = false, jumpUp = false;
+
+            if (mode === 'defend') {
+                // Place a bubble between ball and goal as a shield
+                const bubbleWouldHelp = distToBall < 200 && ball.vx > 0;
+                if (bubbleWouldHelp) {
+                    shouldJump = true;
+                    jumpLeft = ball.x < ai.x;
+                    jumpRight = ball.x > ai.x;
+                    jumpUp = !jumpLeft && !jumpRight;
+                }
+                // Also jump to intercept high incoming balls
+                if (threatened && ball.y < ai.y - 50) {
+                    shouldJump = true;
+                    jumpLeft  = ball.x < ai.x - 40;
+                    jumpRight = ball.x > ai.x + 40;
+                    jumpUp    = !jumpLeft && !jumpRight;
+                }
+            } else if (mode === 'attack') {
+                // Directional jump to angle ball toward goal
+                if (distToBall < 130) {
+                    shouldJump = true;
+                    // Jump toward the opponent's goal to add leftward force
+                    jumpLeft  = true;
+                    jumpRight = false;
+                    jumpUp    = false;
+                }
+            } else {
+                // Chase - jump to reach high balls or use bump
+                if (ball.y < ai.y - 80 && Math.abs(ai.x - ball.x) < 200) {
+                    shouldJump = true;
+                    jumpLeft  = ball.x < ai.x - 40;
+                    jumpRight = ball.x > ai.x + 40;
+                    jumpUp    = !jumpLeft && !jumpRight;
+                }
+                // Random jump for easy AI
+                if (cfg.randomJump > 0 && Math.random() < cfg.randomJump) {
+                    shouldJump = true; jumpUp = true;
+                }
+            }
+
+            if (shouldJump) {
+                gameState.keys['ArrowLeft']  = jumpLeft;
+                gameState.keys['ArrowRight'] = jumpRight;
+                gameState.keys['ArrowUp']    = jumpUp;
                 jump(ai);
-                gameState.keys['ArrowUp'] = false;
+                gameState.keys['ArrowLeft']  = false;
+                gameState.keys['ArrowRight'] = false;
+                gameState.keys['ArrowUp']    = false;
                 aiState.lastJumpTime = now;
             }
         }
+
         aiState.lastActionTime = now;
     }
 
