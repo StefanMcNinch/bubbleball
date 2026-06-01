@@ -185,10 +185,15 @@
             { x: 25,   y: 875, width: 1450, height: 25  }
         ],
         corners: [
-            { x: 0,    y: 0,   radius: 25, type: 'tl' },
-            { x: 1475, y: 0,   radius: 25, type: 'tr' },
-            { x: 0,    y: 875, radius: 25, type: 'bl' },
-            { x: 1475, y: 875, radius: 25, type: 'br' }
+            { x: 0,    y: 0,   radius: 70, type: 'tl' },
+            { x: 1475, y: 0,   radius: 70, type: 'tr' },
+            { x: 0,    y: 875, radius: 70, type: 'bl' },
+            { x: 1475, y: 875, radius: 70, type: 'br' }
+        ],
+        bumps: [
+            { x: 375,  y: 875, radius: 38 },
+            { x: 750,  y: 875, radius: 38 },
+            { x: 1125, y: 875, radius: 38 },
         ],
         keys: {}, gameRunning: true,
         gravity: 0.375, ballGravity: 0.147, friction: 0.8,
@@ -435,7 +440,29 @@
             }
         }
 
-        player.x = Math.max(25 + player.radius, Math.min(canvas.width - 25 - player.radius, player.x));
+        // Bump collisions (player)
+        for (let bump of gameState.bumps) {
+            const dx = player.x - bump.x, dy = player.y - bump.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < player.radius + bump.radius) {
+                const a = Math.atan2(dy, dx);
+                player.x = bump.x + Math.cos(a) * (player.radius + bump.radius);
+                player.y = bump.y + Math.sin(a) * (player.radius + bump.radius);
+                const dot = player.vx * Math.cos(a) + player.vy * Math.sin(a);
+                player.vx = (player.vx - 2 * dot * Math.cos(a)) * 0.6;
+                player.vy = (player.vy - 2 * dot * Math.sin(a)) * 0.6;
+            }
+        }
+
+        player.x = Math.max(25 + player.radius, Math.min(canvas.width  - 25 - player.radius, player.x));
+        if (player.y + player.radius > canvas.height - 25) {
+            player.y = canvas.height - 25 - player.radius;
+            player.vy = 0; player.onGround = true;
+        }
+        if (player.y - player.radius < 25) {
+            player.y = 25 + player.radius;
+            player.vy = 0;
+        }
 
         for (let c of gameState.corners) {
             const cx = c.x + (c.type.includes('r') ? 0 : c.radius);
@@ -473,6 +500,25 @@
                 else if (ball.vx < 0 && ball.x > w.x + w.width)
                     { ball.x = w.x + w.width + ball.radius; ball.vx = Math.abs(ball.vx) * 0.85; }
             }
+        }
+
+        // Bumps
+        for (let bump of gameState.bumps) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(bump.x, bump.y, bump.radius, Math.PI, 0); // top half only
+            ctx.closePath();
+            const bg = ctx.createRadialGradient(bump.x, bump.y - bump.radius * 0.3, 2, bump.x, bump.y, bump.radius);
+            bg.addColorStop(0, '#4a4a7a');
+            bg.addColorStop(1, '#2a2a4a');
+            ctx.fillStyle = bg;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(150,150,255,0.5)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(180,180,255,0.4)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
         }
 
         for (let player of [gameState.player1, gameState.player2]) {
@@ -518,6 +564,19 @@
                 const dot = ball.vx * Math.cos(a) + ball.vy * Math.sin(a);
                 ball.vx = (ball.vx - 2 * dot * Math.cos(a)) * 0.8;
                 ball.vy = (ball.vy - 2 * dot * Math.sin(a)) * 0.8;
+            }
+        }
+
+        // Bump collisions (ball)
+        for (let bump of gameState.bumps) {
+            const dist = Math.sqrt((ball.x - bump.x)**2 + (ball.y - bump.y)**2);
+            if (dist < ball.radius + bump.radius) {
+                const a = Math.atan2(ball.y - bump.y, ball.x - bump.x);
+                ball.x = bump.x + Math.cos(a) * (ball.radius + bump.radius);
+                ball.y = bump.y + Math.sin(a) * (ball.radius + bump.radius);
+                const dot = ball.vx * Math.cos(a) + ball.vy * Math.sin(a);
+                ball.vx = (ball.vx - 2 * dot * Math.cos(a)) * 1.15;
+                ball.vy = (ball.vy - 2 * dot * Math.sin(a)) * 1.15;
             }
         }
 
